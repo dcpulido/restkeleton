@@ -3,15 +3,18 @@
 # es recomendable??
 
 import threading
+import os
 import sys
 sys.path.insert(0, './models')
 sys.path.insert(0, './')
 from instance import Instance
+from functools import wraps
 
 from flask import render_template
 from flask import Flask
 from flask import request
 from flask import redirect
+from flask import session,  url_for, escape
 import configparser
 
 import urllib2
@@ -21,6 +24,20 @@ import json
 import base64
 import datetime
 
+def logged():
+    def logged_decorator(func):
+        @wraps(func)
+        def wrapped_function(*args,
+                             **kwargs):
+            aux = func(*args,
+                       **kwargs)
+            print "check log"
+            if 'username' in session:
+                return aux
+            else:
+                return redirect(url_for('index'))
+        return wrapped_function
+    return logged_decorator
 
 def ConfigSectionMap(section, Config):
     dict1 = {}
@@ -47,6 +64,7 @@ def get_general_conf(name):
 
 
 app = Flask(__name__, template_folder="static")
+app.secret_key = os.urandom(24)
 # template_folder="../templates")
 daoconf = get_general_conf("Mysql")
 flaskconf = get_general_conf("Flask")
@@ -71,6 +89,7 @@ class flaskApp(threading.Thread):
 
 @app.route("/current",
            methods=['GET'])
+@logged()
 def current_time():
     now = datetime.datetime.now()
     return json.dumps(dict(
@@ -83,10 +102,36 @@ def current_time():
         weekday=datetime.datetime.today().weekday()
     ))
 
+@app.route('/')
+def index():
+    if 'username' in session:
+        return 'Logged in as %s' % escape(session['username'])
+    return 'You are not logged in'
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        session['username'] = request.form['username']
+        return redirect(url_for('index'))
+    return '''
+        <form method="post">
+            <p><input type=text name=username>
+            <p><input type=submit value=Login>
+        </form>
+    '''
+
+
+@app.route('/logout')
+def logout():
+    # remove the username from the session if it's there
+    session.pop('username', None)
+    return redirect(url_for('index'))
+
+
 @app.route("/something",
            methods=['POST', 'GET'])
-@shell_log(verbose=1)
-def fet_post_user():
+def fet_something():
     if request.method == 'GET':
         something = mysql.get_all("something")
         toret = []
@@ -94,15 +139,14 @@ def fet_post_user():
             toret.append(som)
         return json.dumps(ret(toret))
 
+
 @app.route('/shutdown',
            methods=['GET', 'POST'])
-@shell_log(verbose=int(flaskconf["verbose"]))
 def shutdown():
     stop_flask()
     return 'Server shutting down...'
 
 
-@shell_log(verbose=int(flaskconf["verbose"]))
 def stop_flask():
     func = request.environ.get("werkzeug.server.shutdown")
     if func is None:
@@ -110,7 +154,6 @@ def stop_flask():
     func()
 
 
-@shell_log(verbose=int(flaskconf["verbose"]))
 def get_last(items):
     fl = True
     last = None
@@ -126,7 +169,7 @@ def get_last(items):
     else:
         return items
 
-@shell_log(verbose=int(flaskconf["verbose"]))
+
 def encode_image(item):
     with open(item.image, "rw") as image:
         item.image = base64.b64encode(image.read())
