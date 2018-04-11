@@ -5,9 +5,6 @@ import logging
 import mysql.connector
 from mysql.connector import errorcode
 from instance import Instance
-from logger import shell_log
-
-config = {}
 
 
 class mysqlDAO:
@@ -15,12 +12,10 @@ class mysqlDAO:
     def __init__(self,
                  conf):
         self.conf = conf
-        config = conf
         self._spec = {}
         self.connect_to_database()
         self.get_schema()
 
-    @shell_log()
     def connect_to_database(self):
         try:
             self.cnx = mysql.connector.connect(user=self.conf["user"],
@@ -37,7 +32,6 @@ class mysqlDAO:
             else:
                 logging.info(err)
 
-    @shell_log()
     def insert(self,
                ob):
         keys = ""
@@ -66,11 +60,9 @@ class mysqlDAO:
             cursor.close()
             return lsid
         except Exception, e:
-            self.connect_to_database()
             logging.info(e)
-            return self.insert(ob)
+            return None
 
-    @shell_log()
     def get_by_id(self,
                   id,
                   module_name):
@@ -113,10 +105,8 @@ class mysqlDAO:
         except Exception, e:
             logging.info(e)
             logging.info("error in get by id returning []")
-            self.connect_to_database()
-            return self.get_by_id(id, module_name)
+            return []
 
-    @shell_log()
     def get_all(self,
                 module_name):
         query = "SELECT  * FROM " + \
@@ -137,10 +127,8 @@ class mysqlDAO:
         except Exception, e:
             logging.info(e)
             logging.info("error in get all returning []")
-            self.connect_to_database()
-            return self.get_all(module_name)
+            return []
 
-    @shell_log()
     def delete(self,
                id,
                module_name):
@@ -170,7 +158,6 @@ class mysqlDAO:
             self.delete(id, module_name)
             raise
 
-    @shell_log()
     def update(self,
                ob):
         def ret(x): return '"'+x+'"' \
@@ -201,10 +188,7 @@ class mysqlDAO:
             cursor.close()
         except Exception, e:
             logging.info(e)
-            self.connect_to_database()
-            self.update(ob)
 
-    @shell_log()
     def get_schema(self):
         try:
             cursor = self.cnx.cursor(dictionary=True)
@@ -226,11 +210,9 @@ class mysqlDAO:
         except Exception, e:
             logging.info(e)
 
-    @shell_log()
     def disconnect(self):
         self.cnx.close()
 
 
 if __name__ == "__main__":
     dao = mysqlDAO()
-    
