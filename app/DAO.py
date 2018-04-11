@@ -52,16 +52,9 @@ class mysqlDAO:
             " (" + \
             keys + \
             values
-        try:
-            cursor = self.cnx.cursor()
-            cursor.execute(query, ob.to_dict())
-            lsid = cursor.lastrowid
-            self.cnx.commit()
-            cursor.close()
-            return lsid
-        except Exception, e:
-            logging.info(e)
-            return None
+        return self.execute_query(query,
+                                  module_name,
+                                  ob=ob)
 
     def get_by_id(self,
                   id,
@@ -87,47 +80,45 @@ class mysqlDAO:
             module_name + \
             " WHERE " + \
             ids
-        try:
-            cursor = self.cnx.cursor(dictionary=True)
-            cursor.execute(query)
-            toret = []
-            for c in cursor:
-                if c is not None:
-                    instance = Instance()
-                    instance.__class__.__name__ = module_name
-                    instance.set_by_dic(c)
-                    toret.append(instance)
-            cursor.close()
-            if len(toret) == 1:
-                return toret[0]
-            else:
-                return toret
-        except Exception, e:
-            logging.info(e)
-            logging.info("error in get by id returning []")
-            return []
+        return self.execute_query(query,
+                                  module_name,
+                                  one_result=True)
+
+    def get_by_arg(self,
+                   arg,
+                   module_name,
+                   dictionary=False):
+        instance = Instance()
+        instance.__class__.__name__ = module_name
+
+        def ret(x): return '"'+x+'"' \
+            if type(x).__name__ == "str" \
+            or type(x).__name__ == "unicode" \
+            else str(x)
+        ids = ""
+        for kk in arg.keys():
+            ids += kk + \
+                "=" +\
+                ret(arg[kk]) + \
+                " AND "
+        ids = ids[:len(ids)-5]
+        query = "SELECT * " + \
+            ", ".join(instance.to_dict().keys()) + \
+            " FROM " + \
+            module_name + \
+            " WHERE " + \
+            ids
+        return self.execute_query(query,
+                                  module_name,
+                                  one_result=True,
+                                  dictionary=dictionary)
 
     def get_all(self,
                 module_name):
         query = "SELECT  * FROM " + \
                 module_name
-        try:
-            cursor = self.cnx.cursor(dictionary=True)
-            cursor.execute(query)
-            toret = []
-            for c in cursor:
-                instance = None
-                if c is not None:
-                    instance = Instance()
-                    instance.__class__.__name__ = module_name
-                    instance.set_by_dic(c)
-                    toret.append(instance)
-            cursor.close()
-            return toret
-        except Exception, e:
-            logging.info(e)
-            logging.info("error in get all returning []")
-            return []
+        return self.execute_query(query,
+                                  module_name)
 
     def delete(self,
                id,
@@ -148,15 +139,8 @@ class mysqlDAO:
                 module_name + \
                 " WHERE " + \
                 ids
-        try:
-            cursor = self.cnx.cursor()
-            cursor.execute(query)
-            self.cnx.commit()
-            cursor.close()
-        except Exception, e:
-            self.connect_to_database()
-            self.delete(id, module_name)
-            raise
+        return self.execute_query(query,
+                                  module_name)
 
     def update(self,
                ob):
@@ -180,14 +164,60 @@ class mysqlDAO:
                 ob.__class__.__name__ + \
                 sets + \
                 ww
+        return self.execute_query(query,
+                                  module_name,
+                                  ob=ob)
+
+    def execute_query(self,
+                      query,
+                      module_name,
+                      ob=None,
+                      one_result=False,
+                      dictionary=False):
         try:
-            cursor = self.cnx.cursor()
-            cursor.execute(query,
-                           ob.to_dict().values())
-            self.cnx.commit()
+            cursor = self.cnx.cursor(dictionary=True)
+            if query[:6] == "SELECT":
+                cursor.execute(query)
+                toret = []
+                for c in cursor:
+                    if not dictionary:
+                        instance = None
+                        if c is not None:
+                            instance = Instance()
+                            instance.__class__.__name__ = module_name
+                            instance.set_by_dic(c)
+                            toret.append(instance)
+                    else:
+                        toret.append(c)
+                cursor.close()
+                if one_result:
+                    return toret[0]
+                else:
+                    return toret
+            if query[:6] == "INSERT":
+                cursor.execute(query, ob.to_dict())
+                lsid = cursor.lastrowid
+                self.cnx.commit()
+                cursor.close()
+                return lsid
+            if query[:6] == "DELETE":
+                cursor.execute(query)
+                self.cnx.commit()
+            if query[:6] == "UPDATE":
+                cursor.execute(query,
+                               ob.to_dict().values())
+                self.cnx.commit()
+
             cursor.close()
+            return "ok"
+
         except Exception, e:
             logging.info(e)
+            return None
+        except Exception, e:
+            logging.info(e)
+            logging.info("error in get all returning []")
+            return None
 
     def get_schema(self):
         try:
@@ -214,5 +244,3 @@ class mysqlDAO:
         self.cnx.close()
 
 
-if __name__ == "__main__":
-    dao = mysqlDAO()
