@@ -24,6 +24,9 @@ import json
 import base64
 import datetime
 
+from redis import Redis
+ONLINE_LAST_MINUTES = 5
+
 def logged():
     def logged_decorator(func):
         @wraps(func)
@@ -63,12 +66,36 @@ def get_general_conf(name):
     return myprior
 
 
+redis = Redis()
 app = Flask(__name__, template_folder="static")
 app.secret_key = os.urandom(24)
 # template_folder="../templates")
 daoconf = get_general_conf("Mysql")
 flaskconf = get_general_conf("Flask")
 
+def mark_online(user_id):
+    now = int(time.time())
+    expires = now + (ONLINE_LAST_MINUTES * 60) + 10
+    all_users_key = 'online-users/%d' % (now // 60)
+    user_key = 'user-activity/%s' % user_id
+    p = redis.pipeline()
+    p.sadd(all_users_key, user_id)
+    p.set(user_key, now)
+    p.expireat(all_users_key, expires)
+    p.expireat(user_key, expires)
+    p.execute()
+
+def get_user_last_activity(user_id):
+    last_active = redis.get('user-activity/%s' % user_id)
+    if last_active is None:
+        return None
+    return datetime.utcfromtimestamp(int(last_active))
+
+def get_online_users():
+    current = int(time.time()) // 60
+    minutes = xrange(ONLINE_LAST_MINUTES)
+    return redis.sunion(['online-users/%d' % (current - x)
+                         for x in minutes])
 
 def ret(item): return [k.to_dict() for k in item] if type(
     item).__name__ == "list" else item.to_dict()
@@ -85,6 +112,22 @@ class flaskApp(threading.Thread):
 
     def disconnect(self):
         urllib2.urlopen("http://localhost:5000/shutdown").read()
+
+#cross side allow
+@app.after_request
+def sthtest(response):
+    if request.headers.get('Origin'):
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get(
+            'Origin')
+    else:
+        response.headers["Access-Control-Allow-Origin"] = request.remote_addr
+    return response
+
+#online users
+@app.before_request
+def mark_current_user_online():
+    mark_online(request.remote_addr)
+
 
 
 @app.route("/current",
