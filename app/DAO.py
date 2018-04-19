@@ -5,6 +5,8 @@ import logging
 import mysql.connector
 from mysql.connector import errorcode
 from instance import Instance
+from bson import ObjectId
+from pymongo import MongoClient
 
 
 class mysqlDAO:
@@ -244,3 +246,42 @@ class mysqlDAO:
         self.cnx.close()
 
 
+class mongoDAO:
+    def __init__(self):
+        self.client = MongoClient()
+
+    def insert(self,
+               ob,
+               collection,
+               instance=False):
+        db = eval("self.client."+collection)
+        if instance:
+            ob = ob.to_dict()
+        return db.ob.insert_one(ob)
+
+    def get_by_arg(self,
+                   arg,
+                   collection,
+                   one_result=False):
+        db = eval("self.client."+collection)
+        cursor = db.ob.find(arg)
+        toret = []
+        for c in cursor:
+            toret.append(c)
+        if one_result:
+            if len(toret > 1):
+                return toret[0]
+        return toret
+
+    def delete_by_arg(self,
+                      arg,
+                      collection):
+        db = eval("self.client."+collection)
+        db.ob.delete_many(arg)
+
+if __name__ == "__main__":
+    mng = mongoDAO()
+    print mng.insert(dict(holis="hola"), "holas")
+    print mng.get_by_arg(dict(holis="hola"), "holas")
+    mng.delete_by_arg(dict(holis="hola"), "holas")
+    print mng.get_by_arg(dict(holis="hola"), "holas")
